@@ -142,7 +142,7 @@ function drawPMCard(
   for (const gate of pm.gates) {
     items.push({ kind: 'gate', text: `Gate Approved: G${gate.gate} (${gate.projects.length})` });
     for (const proj of gate.projects) {
-      items.push({ kind: 'proj', text: proj.projectName });
+      items.push({ kind: 'proj', text: `${proj.projectName} - ${proj.projectId}` });
     }
   }
 

@@ -14,14 +14,13 @@ const h = (c: string) => (c.startsWith('#') ? c.slice(1) : c);
 const F_GATE = 7.5;
 const F_PROJ = 7.0;
 
-// Fixed row heights — predictable, consistent
-const GATE_ROW_H = 0.22;   // gate pill row
-const PROJ_ROW_H = 0.165;  // project bullet row
-const MORE_ROW_H = 0.155;  // "+N more" row
-const HDR_H_TOTAL = 0.05 + 0.20 + 0.04 + 0.06; // topBar + name + divider gap + content top pad
-const CARD_PAD_B  = 0.05;  // inner bottom padding
+// Base row heights (natural size — may scale down proportionally when card is compressed)
+const GATE_ROW_H  = 0.22;   // gate pill row
+const PROJ_ROW_H  = 0.165;  // project bullet row
+const HDR_H_TOTAL = 0.05 + 0.20 + 0.04 + 0.06; // topBar + name + divider + content-top-pad
+const CARD_PAD_B  = 0.05;   // inner bottom padding
 
-/** Total natural height needed to show ALL content at fixed row sizes */
+/** Total natural height to show ALL content at base row sizes */
 function computeCardHeight(pm: PMGroup): number {
   let h = HDR_H_TOTAL + CARD_PAD_B;
   for (const gate of pm.gates) {
@@ -140,77 +139,45 @@ function drawPMCard(
     line: { color: h(VOIS_COLORS.cardBorder), pt: 0.5 },
   });
 
-  // ── content area — fixed row heights, clean overflow with "+N more" ───
-  const contentStartY = divY + 0.04;
-  const cardBottom    = cy + cardH - CARD_PAD_B;
-  const textW         = cardW - 0.20;
+  // ── content area — all projects always shown, rows scale with card ────
+  const contentStartY  = divY + 0.04;
+  const textW          = cardW - 0.20;
 
-  // Flatten all items so we can count how many fit before committing to render
-  interface RI { kind: 'gate' | 'proj'; gate: GateGroup; proj?: Project }
-  const allRows: RI[] = [];
-  for (const gate of pm.gates) {
-    allRows.push({ kind: 'gate', gate });
-    for (const proj of gate.projects) allRows.push({ kind: 'proj', gate, proj });
-  }
+  // Scale row heights proportionally so ALL content fills exactly this card's height
+  const naturalContent = computeCardHeight(pm) - HDR_H_TOTAL - CARD_PAD_B;
+  const actualContent  = cardH - HDR_H_TOTAL - CARD_PAD_B;
+  const rowScale       = naturalContent > 0 ? actualContent / naturalContent : 1;
 
-  // Determine how many rows fit, reserving space for "+N more" when needed
-  let usedH = contentStartY - cy;  // offset from card top to content start
-  let fitCount = 0;
-  for (let i = 0; i < allRows.length; i++) {
-    const rowH = allRows[i].kind === 'gate' ? GATE_ROW_H : PROJ_ROW_H;
-    const remaining = allRows.length - i - 1;
-    const needMore  = remaining > 0 ? MORE_ROW_H : 0;
-    if (usedH + rowH + needMore + CARD_PAD_B > cardH + 0.005) break;
-    usedH += rowH;
-    fitCount++;
-  }
-
-  const hidden    = allRows.length - fitCount;
-  const showRows  = allRows.slice(0, fitCount);
-
-  // Never render a gate label as the very last shown item (orphan guard)
-  if (showRows.length > 0 && showRows[showRows.length - 1].kind === 'gate') {
-    showRows.pop();
-  }
-  const finalHidden = allRows.length - showRows.length;
+  const gateH = GATE_ROW_H * rowScale;
+  const projH = PROJ_ROW_H * rowScale;
 
   let gy = contentStartY;
-  for (const row of showRows) {
-    if (row.kind === 'gate') {
-      slide.addShape(RECT, {
-        x: cx + 0.07, y: gy + 0.01,
-        w: cardW - 0.14, h: GATE_ROW_H - 0.02,
-        fill: { color: h(VOIS_COLORS.gateTag) },
-        line: { color: h(VOIS_COLORS.cardBorder), pt: 0.5 },
-      });
-      slide.addText(`Gate Approved: ${row.gate.gate} (${row.gate.projects.length})`, {
-        x: cx + 0.10, y: gy + 0.01,
-        w: cardW - 0.20, h: GATE_ROW_H - 0.02,
-        fontSize: F_GATE, bold: true,
-        color: h(VOIS_COLORS.gateTagText), fontFace: FONTS.body, valign: 'middle',
-      });
-      gy += GATE_ROW_H;
-    } else {
-      const txt = `• ${row.proj!.projectName} - ${row.proj!.projectId}`;
-      slide.addText(txt, {
-        x: cx + 0.12, y: gy,
-        w: textW, h: PROJ_ROW_H,
-        fontSize: F_PROJ,
-        color: h(VOIS_COLORS.bodyText), fontFace: FONTS.body,
-        valign: 'middle',
-      });
-      gy += PROJ_ROW_H;
-    }
-  }
-
-  // "+N more" indicator if content was clipped
-  if (finalHidden > 0) {
-    slide.addText(`+${finalHidden} more`, {
-      x: cx + 0.12, y: gy,
-      w: textW, h: MORE_ROW_H,
-      fontSize: 6, italic: true,
-      color: h(VOIS_COLORS.mutedText), fontFace: FONTS.body, valign: 'middle',
+  for (const gate of pm.gates) {
+    // Gate label pill
+    slide.addShape(RECT, {
+      x: cx + 0.07, y: gy + 0.01,
+      w: cardW - 0.14, h: gateH - 0.02,
+      fill: { color: h(VOIS_COLORS.gateTag) },
+      line: { color: h(VOIS_COLORS.cardBorder), pt: 0.5 },
     });
+    slide.addText(`Gate Approved: ${gate.gate} (${gate.projects.length})`, {
+      x: cx + 0.10, y: gy + 0.01,
+      w: cardW - 0.20, h: gateH - 0.02,
+      fontSize: F_GATE, bold: true,
+      color: h(VOIS_COLORS.gateTagText), fontFace: FONTS.body, valign: 'middle',
+    });
+    gy += gateH;
+
+    // Project rows
+    for (const proj of gate.projects) {
+      slide.addText(`• ${proj.projectName} - ${proj.projectId}`, {
+        x: cx + 0.12, y: gy,
+        w: textW, h: projH,
+        fontSize: F_PROJ,
+        color: h(VOIS_COLORS.bodyText), fontFace: FONTS.body, valign: 'middle',
+      });
+      gy += projH;
+    }
   }
 }
 

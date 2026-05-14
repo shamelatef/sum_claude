@@ -351,12 +351,12 @@ function addPMSlide(
     for (let b = 0; b < 2; b++) {
       const lineY = by + LINE_H * (2 + b) + 0.01;
       slide.addText('•', {
-        x: tx + 0.05, y: lineY, w: 0.18, h: LINE_H,
+        x: tx + 0.05, y: lineY, w: 0.18, h: 0.22,
         fontSize: 8,
         color: h(VOIS_COLORS.mutedText), fontFace: FONTS.body, valign: 'middle',
       });
       slide.addText('', {
-        x: tx + 0.23, y: lineY, w: tw - 0.23, h: LINE_H,
+        x: tx + 0.23, y: lineY, w: 6.6, h: 0.22,
         fontSize: 8,
         color: h(VOIS_COLORS.bodyText), fontFace: FONTS.body, valign: 'middle',
       });

@@ -272,9 +272,10 @@ const NUM_BULLETS = 2;      // editable bullet lines per project (2 keeps 4 proj
 //       = 0.02   + 3*0.24                       + 0.22   + 0.08   = 1.04"
 const ROW_H    = PAD_TOP + (1 + NUM_BULLETS) * BOX_STEP + BOX_H + PAD_BOT;
 
-// Placeholder text placed in every editable box so users see where to type.
-// The locking step recognises this exact string and leaves those boxes unlocked.
-const PLACEHOLDER = 'This is a placeholder to write status update for your project';
+// Placeholder text placed in editable boxes so users see where to type.
+// The locking step recognises these exact strings and leaves those boxes unlocked.
+const OIT_PLACEHOLDER    = 'this is a placeholder for OIT objective';
+const BULLET_PLACEHOLDER = 'This is a placeholder to write status update for your project';
 
 function addPMSlide(
   pptx: PptxGenJS, pm: PMGroup,
@@ -352,7 +353,7 @@ function addPMSlide(
       color: h(VOIS_COLORS.summaryBarText), fontFace: FONTS.body, valign: 'middle',
     });
     // Editable OIT objective input — h: 0.22, w: 6.6, pre-filled with placeholder
-    slide.addText(PLACEHOLDER, {
+    slide.addText(OIT_PLACEHOLDER, {
       x: tx + 1.15, y: line1Y, w: 6.6, h: BOX_H,
       fontSize: 7, italic: true,
       color: h(VOIS_COLORS.bodyText), fontFace: FONTS.body, valign: 'middle',
@@ -367,10 +368,10 @@ function addPMSlide(
         color: h(VOIS_COLORS.mutedText), fontFace: FONTS.body, valign: 'middle',
       });
       // Editable text box — h: 0.22, w: 6.6, pre-filled with placeholder
-      slide.addText(PLACEHOLDER, {
+      slide.addText(BULLET_PLACEHOLDER, {
         x: tx + 0.23, y: lineY, w: 6.6, h: BOX_H,
         fontSize: 7, italic: true,
-        color: 'AAAAAA', fontFace: FONTS.body, valign: 'middle',
+        color: h(VOIS_COLORS.bodyText), fontFace: FONTS.body, valign: 'middle',
       });
     }
 
@@ -393,9 +394,10 @@ const SHAPE_LOCKS = '<a:spLocks noSelect="1" noMove="1" noResize="1" noRot="1"/>
 function hasNonEmptyText(spBlock: string): boolean {
   const matches = spBlock.match(/<a:t>([^<]*)<\/a:t>/g);
   if (!matches) return false;
+  const PLACEHOLDERS = new Set([OIT_PLACEHOLDER, BULLET_PLACEHOLDER]);
   return matches.some(m => {
     const text = m.replace(/<a:t>|<\/a:t>/g, '').trim();
-    return text.length > 0 && text !== PLACEHOLDER;
+    return text.length > 0 && !PLACEHOLDERS.has(text);
   });
 }
 

@@ -1,4 +1,5 @@
 import PptxGenJS from 'pptxgenjs';
+import JSZip from 'jszip';
 import { PMGroup, GateGroup, Project } from '../types';
 import { VOIS_COLORS, FONTS, FONT_SIZES, PROJECTS_PER_SLIDE, LAYOUT } from '../config/constants';
 import { truncate } from '../utils/nameUtils';
@@ -260,6 +261,15 @@ function flattenProjects(pm: PMGroup): ProjectBlock[] {
   return out;
 }
 
+// PM slide row geometry — every line uses the same BOX_H so there's no overlap
+const BOX_H    = 0.22;    // height of every text box line
+const BOX_STEP = 0.24;    // vertical step between line tops (BOX_H + 0.02 gap)
+const PAD_TOP  = 0.02;    // top inner padding inside each project row
+const PAD_BOT  = 0.08;    // bottom padding / row gap
+// ROW_H = PAD_TOP + 3*BOX_STEP + BOX_H + PAD_BOT
+//       = 0.02   + 0.72        + 0.22   + 0.08   = 1.04"
+const ROW_H    = PAD_TOP + 3 * BOX_STEP + BOX_H + PAD_BOT;
+
 function addPMSlide(
   pptx: PptxGenJS, pm: PMGroup,
   blocks: ProjectBlock[], pageIndex: number,
@@ -290,15 +300,10 @@ function addPMSlide(
     color: h(VOIS_COLORS.summaryBarText), fontFace: FONTS.body, valign: 'middle',
   });
 
-  // Each project gets 4 fixed lines: name + OIT Objective + 2 blank bullets
-  const LINE_H  = 0.175;                       // height of one text line
-  const ROW_GAP = 0.10;                        // visible gap between project rows
-  const ROW_H   = LINE_H * 4 + ROW_GAP;       // total row height ≈ 0.80"
-
   const listStartY = sy + 0.25;
   const listEndY   = LAYOUT.contentEndY;
 
-  // Content starts after the thin red bar
+  // Content starts after the thin red bar (0.05") so offset x by 0.10"
   const tx = LAYOUT.marginL + 0.10;
   const tw = LAYOUT.usableW - 0.10;
 
@@ -320,54 +325,128 @@ function addPMSlide(
       fill: { color: h(VOIS_COLORS.primary) }, line: { color: h(VOIS_COLORS.primary) },
     });
 
-    // ── Line 1: Project name ──────────────────────────────────────────
+    // ── Line 0: Project name (y = by + PAD_TOP) ───────────────────────
+    const line0Y = by + PAD_TOP;
     slide.addText(`• ${project.projectName}`, {
-      x: tx, y: by + 0.01,
-      w: tw, h: LINE_H,
+      x: tx, y: line0Y, w: tw, h: BOX_H,
       fontSize: 9, bold: true,
       color: h(VOIS_COLORS.bodyText), fontFace: FONTS.title, valign: 'middle',
     });
 
-    // ── Line 2: OIT Objective (editable placeholder) ──────────────────
-    const objY = by + LINE_H + 0.01;
+    // ── Line 1: OIT Objective (y = by + PAD_TOP + 1*BOX_STEP) ─────────
+    const line1Y = by + PAD_TOP + BOX_STEP;
     slide.addShape(RECT, {
-      x: tx, y: objY, w: tw, h: LINE_H,
+      x: tx, y: line1Y, w: tw, h: BOX_H,
       fill: { color: 'FFF5F5' },
       line: { color: h(VOIS_COLORS.divider), pt: 0.3 },
     });
     slide.addText('OIT Objective:', {
-      x: tx + 0.05, y: objY, w: 1.1, h: LINE_H,
+      x: tx + 0.05, y: line1Y, w: 1.1, h: BOX_H,
       fontSize: 7, bold: true,
       color: h(VOIS_COLORS.summaryBarText), fontFace: FONTS.body, valign: 'middle',
     });
-    // Blank editable area after the label
+    // Blank editable input — h: 0.22, w: 6.6 (as requested)
     slide.addText('', {
-      x: tx + 1.15, y: objY, w: tw - 1.15, h: LINE_H,
+      x: tx + 1.15, y: line1Y, w: 6.6, h: BOX_H,
       fontSize: 8,
       color: h(VOIS_COLORS.bodyText), fontFace: FONTS.body, valign: 'middle',
     });
 
-    // ── Lines 3–4: blank bullet points (fill manually in PPT) ─────────
+    // ── Lines 2–3: blank bullet points (h: 0.22, w: 6.6) ─────────────
     for (let b = 0; b < 2; b++) {
-      const lineY = by + LINE_H * (2 + b) + 0.01;
+      const lineY = by + PAD_TOP + (2 + b) * BOX_STEP;
       slide.addText('•', {
-        x: tx + 0.05, y: lineY, w: 0.18, h: 0.22,
+        x: tx + 0.05, y: lineY, w: 0.18, h: BOX_H,
         fontSize: 8,
         color: h(VOIS_COLORS.mutedText), fontFace: FONTS.body, valign: 'middle',
       });
+      // Editable text box — h: 0.22, w: 6.6
       slide.addText('', {
-        x: tx + 0.23, y: lineY, w: 6.6, h: 0.22,
+        x: tx + 0.23, y: lineY, w: 6.6, h: BOX_H,
         fontSize: 8,
         color: h(VOIS_COLORS.bodyText), fontFace: FONTS.body, valign: 'middle',
       });
     }
 
-    // ── Row separator (sits inside the content area, gap below is whitespace) ─
+    // ── Row separator ─────────────────────────────────────────────────
     slide.addShape(LINE, {
-      x: LAYOUT.marginL, y: by + ROW_H - ROW_GAP, w: LAYOUT.usableW, h: 0,
+      x: LAYOUT.marginL, y: by + ROW_H - PAD_BOT, w: LAYOUT.usableW, h: 0,
       line: { color: h(VOIS_COLORS.divider), pt: 0.5 },
     });
   }
+}
+
+// ─── JSZip post-processing: lock all non-editable shapes ─────────────────────
+
+const SHAPE_LOCKS = '<a:spLocks noSelect="1" noMove="1" noResize="1" noRot="1"/>';
+
+/**
+ * Returns true if the <p:sp> block contains at least one non-empty <a:t> element.
+ * These shapes have pre-filled text and should be locked.
+ */
+function hasNonEmptyText(spBlock: string): boolean {
+  const matches = spBlock.match(/<a:t>([^<]*)<\/a:t>/g);
+  if (!matches) return false;
+  return matches.some(m => m.replace(/<a:t>|<\/a:t>/g, '').trim().length > 0);
+}
+
+/**
+ * Insert spLocks into a <p:cNvSpPr> element (handles self-closing and open-tag forms).
+ */
+function insertSpLocks(spBlock: string): string {
+  // Already locked — skip
+  if (spBlock.includes('<a:spLocks')) return spBlock;
+
+  // Self-closing: <p:cNvSpPr ... />  →  <p:cNvSpPr ...><a:spLocks .../></p:cNvSpPr>
+  const selfClose = /<p:cNvSpPr([^>]*?)\/>/;
+  if (selfClose.test(spBlock)) {
+    return spBlock.replace(selfClose, `<p:cNvSpPr$1>${SHAPE_LOCKS}</p:cNvSpPr>`);
+  }
+
+  // Open tag: <p:cNvSpPr ...>  →  <p:cNvSpPr ...><a:spLocks .../>
+  const openTag = /(<p:cNvSpPr[^>]*>)/;
+  if (openTag.test(spBlock)) {
+    return spBlock.replace(openTag, `$1${SHAPE_LOCKS}`);
+  }
+
+  return spBlock;
+}
+
+/**
+ * Post-process the raw PPTX blob:
+ * - shapes with non-empty text  → locked (cannot be selected / moved / resized)
+ * - shapes with no <p:txBody>   → locked (decorative rectangles, lines, etc.)
+ * - shapes with only empty <a:t> → LEFT EDITABLE (user input boxes)
+ */
+async function lockNonEditableShapes(blob: Blob): Promise<Blob> {
+  const zip = await JSZip.loadAsync(blob);
+
+  const slideFiles = Object.keys(zip.files).filter(
+    name => /^ppt\/slides\/slide\d+\.xml$/.test(name)
+  );
+
+  for (const slidePath of slideFiles) {
+    let xml = await zip.files[slidePath].async('string');
+
+    xml = xml.replace(/<p:sp>[\s\S]*?<\/p:sp>/g, (spBlock) => {
+      const hasTxBody = spBlock.includes('<p:txBody>');
+
+      if (hasTxBody && !hasNonEmptyText(spBlock)) {
+        // Text body present but all text is empty → editable placeholder, keep unlocked
+        return spBlock;
+      }
+
+      // Everything else (pre-filled text, decorative shapes) → lock
+      return insertSpLocks(spBlock);
+    });
+
+    zip.file(slidePath, xml);
+  }
+
+  return zip.generateAsync({
+    type: 'blob',
+    mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  });
 }
 
 // ─── public API ───────────────────────────────────────────────────────────────
@@ -394,5 +473,7 @@ export async function generatePPT(pmGroups: PMGroup[]): Promise<Blob> {
       addPMSlide(pptx, pm, chunks[p], p, chunks.length, slideNum++);
   }
 
-  return await pptx.write({ outputType: 'blob' }) as unknown as Blob;
+  // Generate raw PPTX blob, then post-process to lock non-editable shapes
+  const rawBlob = await pptx.write({ outputType: 'blob' }) as unknown as Blob;
+  return lockNonEditableShapes(rawBlob);
 }

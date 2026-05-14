@@ -55,7 +55,7 @@ export const FONT_SIZES = {
   pmName:        11,
 };
 
-export const PROJECTS_PER_SLIDE = 4;
+export const PROJECTS_PER_SLIDE = 2;
 
 const W   = SLIDE_CONFIG.width;
 const H   = SLIDE_CONFIG.height;

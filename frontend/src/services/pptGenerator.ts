@@ -262,13 +262,19 @@ function flattenProjects(pm: PMGroup): ProjectBlock[] {
 }
 
 // PM slide row geometry — every line uses the same BOX_H so there's no overlap
-const BOX_H    = 0.22;    // height of every text box line
-const BOX_STEP = 0.24;    // vertical step between line tops (BOX_H + 0.02 gap)
-const PAD_TOP  = 0.02;    // top inner padding inside each project row
-const PAD_BOT  = 0.08;    // bottom padding / row gap
-// ROW_H = PAD_TOP + 3*BOX_STEP + BOX_H + PAD_BOT
-//       = 0.02   + 0.72        + 0.22   + 0.08   = 1.04"
-const ROW_H    = PAD_TOP + 3 * BOX_STEP + BOX_H + PAD_BOT;
+// Structure per project: [0] name · [1] OIT Objective · [2-5] 4 bullet points
+const BOX_H      = 0.22;    // height of every text box line
+const BOX_STEP   = 0.24;    // vertical step between line tops (BOX_H + 0.02 gap)
+const PAD_TOP    = 0.02;    // top inner padding inside each project row
+const PAD_BOT    = 0.08;    // bottom padding / row gap
+const NUM_BULLETS = 4;      // editable bullet lines per project
+// ROW_H = PAD_TOP + (1 + NUM_BULLETS)*BOX_STEP + BOX_H + PAD_BOT
+//       = 0.02   + 5*0.24                       + 0.22   + 0.08   = 1.52"
+const ROW_H    = PAD_TOP + (1 + NUM_BULLETS) * BOX_STEP + BOX_H + PAD_BOT;
+
+// Placeholder text placed in every editable box so users see where to type.
+// The locking step recognises this exact string and leaves those boxes unlocked.
+const PLACEHOLDER = 'This is a placeholder to write status update for your project';
 
 function addPMSlide(
   pptx: PptxGenJS, pm: PMGroup,
@@ -345,26 +351,26 @@ function addPMSlide(
       fontSize: 7, bold: true,
       color: h(VOIS_COLORS.summaryBarText), fontFace: FONTS.body, valign: 'middle',
     });
-    // Blank editable input — h: 0.22, w: 6.6 (as requested)
-    slide.addText('', {
+    // Editable OIT objective input — h: 0.22, w: 6.6, pre-filled with placeholder
+    slide.addText(PLACEHOLDER, {
       x: tx + 1.15, y: line1Y, w: 6.6, h: BOX_H,
-      fontSize: 8,
-      color: h(VOIS_COLORS.bodyText), fontFace: FONTS.body, valign: 'middle',
+      fontSize: 7, italic: true,
+      color: 'AAAAAA', fontFace: FONTS.body, valign: 'middle',
     });
 
-    // ── Lines 2–3: blank bullet points (h: 0.22, w: 6.6) ─────────────
-    for (let b = 0; b < 2; b++) {
+    // ── Lines 2–(1+NUM_BULLETS): editable bullet points ───────────────
+    for (let b = 0; b < NUM_BULLETS; b++) {
       const lineY = by + PAD_TOP + (2 + b) * BOX_STEP;
       slide.addText('•', {
         x: tx + 0.05, y: lineY, w: 0.18, h: BOX_H,
         fontSize: 8,
         color: h(VOIS_COLORS.mutedText), fontFace: FONTS.body, valign: 'middle',
       });
-      // Editable text box — h: 0.22, w: 6.6
-      slide.addText('', {
+      // Editable text box — h: 0.22, w: 6.6, pre-filled with placeholder
+      slide.addText(PLACEHOLDER, {
         x: tx + 0.23, y: lineY, w: 6.6, h: BOX_H,
-        fontSize: 8,
-        color: h(VOIS_COLORS.bodyText), fontFace: FONTS.body, valign: 'middle',
+        fontSize: 7, italic: true,
+        color: 'AAAAAA', fontFace: FONTS.body, valign: 'middle',
       });
     }
 
@@ -381,13 +387,16 @@ function addPMSlide(
 const SHAPE_LOCKS = '<a:spLocks noSelect="1" noMove="1" noResize="1" noRot="1"/>';
 
 /**
- * Returns true if the <p:sp> block contains at least one non-empty <a:t> element.
- * These shapes have pre-filled text and should be locked.
+ * Returns true if the <p:sp> block contains meaningful (non-placeholder) text.
+ * Shapes with only placeholder text are treated as editable user-input boxes.
  */
 function hasNonEmptyText(spBlock: string): boolean {
   const matches = spBlock.match(/<a:t>([^<]*)<\/a:t>/g);
   if (!matches) return false;
-  return matches.some(m => m.replace(/<a:t>|<\/a:t>/g, '').trim().length > 0);
+  return matches.some(m => {
+    const text = m.replace(/<a:t>|<\/a:t>/g, '').trim();
+    return text.length > 0 && text !== PLACEHOLDER;
+  });
 }
 
 /**

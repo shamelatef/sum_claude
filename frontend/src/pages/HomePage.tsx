@@ -1,4 +1,23 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+
+const PM_STORAGE_KEY = 'vois_ppt_selected_pms';
+
+function loadSavedPMs(): string[] {
+  try {
+    const raw = localStorage.getItem(PM_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function savePMs(pms: string[]): void {
+  try {
+    localStorage.setItem(PM_STORAGE_KEY, JSON.stringify(pms));
+  } catch {
+    // ignore storage errors
+  }
+}
 import { DropZone } from '../components/DropZone';
 import { ExcelPreview } from '../components/ExcelPreview';
 import { ColumnMapper } from '../components/ColumnMapper';
@@ -42,9 +61,20 @@ export const HomePage: React.FC = () => {
     setStep('map');
   };
 
+  // Persist selectedPMs to localStorage whenever they change
+  useEffect(() => {
+    if (selectedPMs.length > 0) savePMs(selectedPMs);
+  }, [selectedPMs]);
+
   const handleMappingConfirm = () => {
     if (!isComplete) return;
-    setSelectedPMs([...uniquePMs]);
+    // Restore last session's selection, keeping only PMs present in the current file
+    const saved = loadSavedPMs();
+    const restored = saved.length > 0
+      ? uniquePMs.filter(pm => saved.includes(pm))
+      : [];
+    // Fall back to all PMs if nothing from the saved list matches
+    setSelectedPMs(restored.length > 0 ? restored : [...uniquePMs]);
     setStep('select');
   };
 

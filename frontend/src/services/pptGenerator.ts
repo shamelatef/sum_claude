@@ -390,15 +390,23 @@ const SHAPE_LOCKS = '<a:spLocks noSelect="1" noMove="1" noResize="1" noRot="1"/>
 /**
  * Returns true if the <p:sp> block contains meaningful (non-placeholder) text.
  * Shapes with only placeholder text are treated as editable user-input boxes.
+ *
+ * NOTE: pptxgenjs may split a single logical string across several <a:t> runs,
+ * so we must join all fragments before comparing against placeholder strings.
  */
 function hasNonEmptyText(spBlock: string): boolean {
   const matches = spBlock.match(/<a:t>([^<]*)<\/a:t>/g);
   if (!matches) return false;
+
+  // Reassemble all text runs into one string
+  const fullText = matches.map(m => m.replace(/<a:t>|<\/a:t>/g, '')).join('').trim();
+  if (!fullText) return false;
+
+  // If the whole content is a placeholder the box must stay editable → not "non-empty"
   const PLACEHOLDERS = new Set([OIT_PLACEHOLDER, BULLET_PLACEHOLDER]);
-  return matches.some(m => {
-    const text = m.replace(/<a:t>|<\/a:t>/g, '').trim();
-    return text.length > 0 && !PLACEHOLDERS.has(text);
-  });
+  if (PLACEHOLDERS.has(fullText)) return false;
+
+  return true;
 }
 
 /**

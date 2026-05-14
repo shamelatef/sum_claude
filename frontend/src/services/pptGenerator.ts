@@ -42,7 +42,7 @@ function addHeader(slide: PptxGenJS.Slide, title: string, sub?: string): void {
   }
 
   slide.addText('VOIS', {
-    x: W - 0.48, y: 0, w: 0.44, h: H,
+    x: W - 0.62, y: 0, w: 0.59, h: 0.55,
     fontSize: 9.5, bold: true,
     color: h(VOIS_COLORS.primary), fontFace: FONTS.title,
     align: 'center', valign: 'middle',
@@ -204,7 +204,7 @@ function addSummarySlide(pptx: PptxGenJS, pmGroups: PMGroup[], slideNum: number)
   slide.addShape(RECT, { x: 0, y: 0, w: LAYOUT.slideW, h: LAYOUT.slideH,
     fill: { color: h(VOIS_COLORS.slideBg) }, line: { color: h(VOIS_COLORS.slideBg) } });
 
-  addHeader(slide, 'Portfolio Summary');
+  addHeader(slide, 'Projects Summary - DWS EG PM Team');
   addFooter(slide, slideNum);
 
   const totalAll = pmGroups.reduce((s, g) => s + g.totalProjects, 0);

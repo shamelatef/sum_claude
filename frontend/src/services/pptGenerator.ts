@@ -294,79 +294,82 @@ function addPMSlide(
     }
   );
 
+  // Each project gets 4 fixed lines: name + OIT Objective + 2 blank bullets
+  const LINE_H  = 0.175;                       // height of one text line
+  const ROW_PAD = 0.055;                       // vertical gap between rows
+  const ROW_H   = LINE_H * 4 + ROW_PAD;       // total row height ≈ 0.755"
+
   const listStartY = sy + 0.25;
   const listEndY   = LAYOUT.contentEndY;
-  const listH      = listEndY - listStartY;
-  const rowH       = blocks.length > 0 ? Math.min(listH / blocks.length, 0.68) : 0.68;
 
-  const GATE_W = 1.55;
-  let currentGate = '';
+  // Content starts after the thin red bar
+  const tx = LAYOUT.marginL + 0.10;
+  const tw = LAYOUT.usableW - 0.10;
 
   for (let i = 0; i < blocks.length; i++) {
-    const { gate, project } = blocks[i];
-    const by = listStartY + i * rowH;
-    if (by + rowH > listEndY + 0.04) break;
+    const { project } = blocks[i];
+    const by = listStartY + i * ROW_H;
+    if (by + ROW_H > listEndY + 0.01) break;
 
-    const isNewGate = gate.gate !== currentGate;
-    currentGate = gate.gate;
-
+    // ── Row background (alternating) ──────────────────────────────────
     slide.addShape(RECT, {
-      x: LAYOUT.marginL, y: by, w: LAYOUT.usableW, h: rowH,
+      x: LAYOUT.marginL, y: by, w: LAYOUT.usableW, h: ROW_H,
       fill: { color: i % 2 === 0 ? h(VOIS_COLORS.rowEven) : h(VOIS_COLORS.rowOdd) },
       line: { color: h(VOIS_COLORS.divider), pt: 0.25 },
     });
 
+    // ── Red left bar (keep) ───────────────────────────────────────────
     slide.addShape(RECT, {
-      x: LAYOUT.marginL, y: by, w: 0.022, h: rowH,
+      x: LAYOUT.marginL, y: by, w: 0.05, h: ROW_H,
       fill: { color: h(VOIS_COLORS.primary) }, line: { color: h(VOIS_COLORS.primary) },
     });
 
-    if (isNewGate) {
-      slide.addShape(RECT, {
-        x: LAYOUT.marginL + 0.022, y: by,
-        w: GATE_W, h: rowH * 0.40,
-        fill: { color: h(VOIS_COLORS.gateSolid) }, line: { color: h(VOIS_COLORS.gateSolid) },
+    // ── Line 1: Project name ──────────────────────────────────────────
+    slide.addText(`• ${project.projectName}`, {
+      x: tx, y: by + 0.01,
+      w: tw, h: LINE_H,
+      fontSize: 9, bold: true,
+      color: h(VOIS_COLORS.bodyText), fontFace: FONTS.title, valign: 'middle',
+    });
+
+    // ── Line 2: OIT Objective (editable placeholder) ──────────────────
+    const objY = by + LINE_H + 0.01;
+    slide.addShape(RECT, {
+      x: tx, y: objY, w: tw, h: LINE_H,
+      fill: { color: 'FFF5F5' },
+      line: { color: h(VOIS_COLORS.divider), pt: 0.3 },
+    });
+    slide.addText('OIT Objective:', {
+      x: tx + 0.05, y: objY, w: 1.1, h: LINE_H,
+      fontSize: 7, bold: true,
+      color: h(VOIS_COLORS.summaryBarText), fontFace: FONTS.body, valign: 'middle',
+    });
+    // Blank editable area after the label
+    slide.addText('', {
+      x: tx + 1.15, y: objY, w: tw - 1.15, h: LINE_H,
+      fontSize: 8,
+      color: h(VOIS_COLORS.bodyText), fontFace: FONTS.body, valign: 'middle',
+    });
+
+    // ── Lines 3–4: blank bullet points (fill manually in PPT) ─────────
+    for (let b = 0; b < 2; b++) {
+      const lineY = by + LINE_H * (2 + b) + 0.01;
+      slide.addText('•', {
+        x: tx + 0.05, y: lineY, w: 0.18, h: LINE_H,
+        fontSize: 8,
+        color: h(VOIS_COLORS.mutedText), fontFace: FONTS.body, valign: 'middle',
       });
-      slide.addText(`Gate Approved: ${gate.gate} (${gate.projects.length})`, {
-        x: LAYOUT.marginL + 0.022, y: by,
-        w: GATE_W, h: rowH * 0.40,
-        fontSize: FONT_SIZES.gateLabel, bold: true,
-        color: h(VOIS_COLORS.gateSolidTxt), fontFace: FONTS.body,
-        align: 'center', valign: 'middle',
+      slide.addText('', {
+        x: tx + 0.23, y: lineY, w: tw - 0.23, h: LINE_H,
+        fontSize: 8,
+        color: h(VOIS_COLORS.bodyText), fontFace: FONTS.body, valign: 'middle',
       });
     }
 
-    const tx = LAYOUT.marginL + GATE_W + 0.10;
-    const tw = LAYOUT.usableW - GATE_W - 0.12;
-    const lh = rowH / 3.2;
-
-    slide.addText(truncate(project.projectName, 90), {
-      x: tx, y: by + lh * 0.06, w: tw, h: lh,
-      fontSize: FONT_SIZES.pmName, bold: true,
-      color: h(VOIS_COLORS.bodyText), fontFace: FONTS.title, valign: 'middle',
-    });
-    slide.addText(`ID: ${project.projectId}`, {
-      x: tx, y: by + lh * 1.08, w: tw * 0.46, h: lh,
-      fontSize: FONT_SIZES.projectDetail,
-      color: h(VOIS_COLORS.mutedText), fontFace: FONTS.body, valign: 'middle',
-    });
-    slide.addShape(RECT, {
-      x: tx + tw * 0.48, y: by + lh * 1.12,
-      w: 0.58, h: lh * 0.72,
-      fill: { color: h(VOIS_COLORS.gateTag) },
-      line: { color: h(VOIS_COLORS.cardBorder), pt: 0.3 },
-    });
-    slide.addText(truncate(project.gateApproved, 20), {
-      x: tx + tw * 0.48, y: by + lh * 1.12,
-      w: 0.58, h: lh * 0.72,
-      fontSize: FONT_SIZES.gateLabel, bold: true,
-      color: h(VOIS_COLORS.gateTagText), fontFace: FONTS.body,
-      align: 'center', valign: 'middle',
-    });
-
+    // ── Row separator ─────────────────────────────────────────────────
     slide.addShape(LINE, {
-      x: LAYOUT.marginL, y: by + rowH - 0.005, w: LAYOUT.usableW, h: 0,
-      line: { color: h(VOIS_COLORS.divider), pt: 0.35 },
+      x: LAYOUT.marginL, y: by + ROW_H - 0.003, w: LAYOUT.usableW, h: 0,
+      line: { color: h(VOIS_COLORS.divider), pt: 0.5 },
     });
   }
 }

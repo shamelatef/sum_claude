@@ -267,9 +267,9 @@ const BOX_H      = 0.22;    // height of every text box line
 const BOX_STEP   = 0.24;    // vertical step between line tops (BOX_H + 0.02 gap)
 const PAD_TOP    = 0.02;    // top inner padding inside each project row
 const PAD_BOT    = 0.08;    // bottom padding / row gap
-const NUM_BULLETS = 4;      // editable bullet lines per project
+const NUM_BULLETS = 2;      // editable bullet lines per project (2 keeps 4 projects/slide)
 // ROW_H = PAD_TOP + (1 + NUM_BULLETS)*BOX_STEP + BOX_H + PAD_BOT
-//       = 0.02   + 5*0.24                       + 0.22   + 0.08   = 1.52"
+//       = 0.02   + 3*0.24                       + 0.22   + 0.08   = 1.04"
 const ROW_H    = PAD_TOP + (1 + NUM_BULLETS) * BOX_STEP + BOX_H + PAD_BOT;
 
 // Placeholder text placed in every editable box so users see where to type.
@@ -355,7 +355,7 @@ function addPMSlide(
     slide.addText(PLACEHOLDER, {
       x: tx + 1.15, y: line1Y, w: 6.6, h: BOX_H,
       fontSize: 7, italic: true,
-      color: 'AAAAAA', fontFace: FONTS.body, valign: 'middle',
+      color: h(VOIS_COLORS.bodyText), fontFace: FONTS.body, valign: 'middle',
     });
 
     // ── Lines 2–(1+NUM_BULLETS): editable bullet points ───────────────

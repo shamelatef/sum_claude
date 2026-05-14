@@ -8,12 +8,36 @@ const RECT = 'rect' as SN;
 const LINE = 'line' as SN;
 const h = (c: string) => (c.startsWith('#') ? c.slice(1) : c);
 
-function distributeCards(count: number): { cols: number; rows: number } {
-  if (count <= 1) return { cols: 1, rows: 1 };
-  if (count <= 2) return { cols: 2, rows: 1 };
-  if (count <= 4) return { cols: 2, rows: Math.ceil(count / 2) };
-  if (count <= 6) return { cols: 3, rows: Math.ceil(count / 3) };
-  return { cols: 3, rows: Math.ceil(count / 3) };
+// ─── layout helpers ───────────────────────────────────────────────────────────
+
+// Fixed font sizes — never shrink; all cards use these values
+const F_GATE   = 7.5;
+const F_PROJ   = 7.0;
+
+// Row geometry constants (inches)
+const GATE_ROW_H  = 0.22;   // gate pill height (always 1 line)
+const PROJ_LINE_H = 0.115;  // height per wrapped line at 7pt Calibri
+const PROJ_PAD_V  = 0.03;   // extra vertical padding per project row
+const HDR_FIXED_H = 0.05 + 0.20 + 0.04 + 0.08; // top-bar + name + divider + content-top-pad
+const CARD_PAD_B  = 0.06;   // inner bottom padding
+const CHARS_PER_IN = 16.5;  // Calibri 7pt average chars per inch (mixed case)
+
+function wrapLines(text: string, widthIn: number): number {
+  const cpl = Math.max(10, Math.floor(widthIn * CHARS_PER_IN));
+  return Math.max(1, Math.ceil(text.length / cpl));
+}
+
+function computeCardHeight(pm: PMGroup, cardW: number): number {
+  const tw = cardW - 0.20;
+  let h = HDR_FIXED_H;
+  for (const gate of pm.gates) {
+    h += GATE_ROW_H;
+    for (const proj of gate.projects) {
+      const txt = `• ${proj.projectName} - ${proj.projectId}`;
+      h += wrapLines(txt, tw) * PROJ_LINE_H + PROJ_PAD_V;
+    }
+  }
+  return h + CARD_PAD_B;
 }
 
 // ─── chrome ───────────────────────────────────────────────────────────────────
@@ -74,8 +98,6 @@ function addFooter(slide: PptxGenJS.Slide, slideNum: number): void {
 
 // ─── PM card ──────────────────────────────────────────────────────────────────
 
-interface ContentItem { kind: 'gate' | 'proj' | 'more'; text: string; }
-
 function drawPMCard(
   slide: PptxGenJS.Slide,
   pm: PMGroup,
@@ -128,106 +150,52 @@ function drawPMCard(
     line: { color: h(VOIS_COLORS.cardBorder), pt: 0.5 },
   });
 
-  // ── content area — dynamic row heights so ALL items fit ──────────────
+  // ── content area — fixed fonts, wrap-aware row heights ───────────────
   const contentStartY = divY + 0.04;
-  const contentEndY   = cy + cardH - 0.04;
-  const contentH      = contentEndY - contentStartY;
-
-  const MAX_GATE_H = 0.22,  MIN_GATE_H = 0.11;
-  const MAX_PROJ_H = 0.175, MIN_PROJ_H = 0.09;
-
-  const items: ContentItem[] = [];
-  for (const gate of pm.gates) {
-    items.push({ kind: 'gate', text: `Gate Approved: ${gate.gate} (${gate.projects.length})` });
-    for (const proj of gate.projects) {
-      items.push({ kind: 'proj', text: `${proj.projectName} - ${proj.projectId}` });
-    }
-  }
-
-  // Scale row heights down proportionally so everything fits
-  const gateCount = items.filter(i => i.kind === 'gate').length;
-  const projCount  = items.filter(i => i.kind === 'proj').length;
-  const neededH    = gateCount * MAX_GATE_H + projCount * MAX_PROJ_H;
-
-  let GATE_H: number, PROJ_H: number;
-  if (neededH <= contentH) {
-    GATE_H = MAX_GATE_H;
-    PROJ_H = MAX_PROJ_H;
-  } else {
-    const scale = contentH / neededH;
-    GATE_H = Math.max(MIN_GATE_H, MAX_GATE_H * scale);
-    PROJ_H = Math.max(MIN_PROJ_H, MAX_PROJ_H * scale);
-  }
-
-  // Font sizes track row height
-  const GATE_FONT = Math.max(5.5, GATE_H * 34);
-  const PROJ_FONT = Math.max(5.0, PROJ_H * 40);
-
-  // Fit as many items as possible; overflow → "+N more"
-  let usedH = 0;
-  const visible: ContentItem[] = [];
-  for (let i = 0; i < items.length; i++) {
-    const rowH = items[i].kind === 'gate' ? GATE_H : PROJ_H;
-    if (usedH + rowH > contentH + 0.005) {
-      visible.pop();
-      const hidden = items.length - visible.length;
-      visible.push({ kind: 'more', text: `+${hidden} more` });
-      break;
-    }
-    visible.push(items[i]);
-    usedH += rowH;
-  }
+  const cardBottom    = cy + cardH - CARD_PAD_B;
+  const textW         = cardW - 0.20;
 
   let gy = contentStartY;
-  for (const item of visible) {
-    if (item.kind === 'gate') {
-      slide.addShape(RECT, {
-        x: cx + 0.07, y: gy + 0.01,
-        w: cardW - 0.14, h: GATE_H - 0.02,
-        fill: { color: h(VOIS_COLORS.gateTag) },
-        line: { color: h(VOIS_COLORS.cardBorder), pt: 0.5 },
-      });
-      slide.addText(truncate(item.text, 40), {
-        x: cx + 0.10, y: gy + 0.01,
-        w: cardW - 0.20, h: GATE_H - 0.02,
-        fontSize: GATE_FONT, bold: true,
-        color: h(VOIS_COLORS.gateTagText), fontFace: FONTS.body, valign: 'middle',
-      });
-      gy += GATE_H;
-    } else if (item.kind === 'proj') {
-      slide.addText(`• ${truncate(item.text, 55)}`, {
+
+  for (const gate of pm.gates) {
+    // Safety: stop if we'd overflow the card
+    if (gy + GATE_ROW_H > cardBottom + 0.01) break;
+
+    // Gate label pill
+    slide.addShape(RECT, {
+      x: cx + 0.07, y: gy + 0.01,
+      w: cardW - 0.14, h: GATE_ROW_H - 0.02,
+      fill: { color: h(VOIS_COLORS.gateTag) },
+      line: { color: h(VOIS_COLORS.cardBorder), pt: 0.5 },
+    });
+    slide.addText(`Gate Approved: ${gate.gate} (${gate.projects.length})`, {
+      x: cx + 0.10, y: gy + 0.01,
+      w: cardW - 0.20, h: GATE_ROW_H - 0.02,
+      fontSize: F_GATE, bold: true,
+      color: h(VOIS_COLORS.gateTagText), fontFace: FONTS.body, valign: 'middle',
+    });
+    gy += GATE_ROW_H;
+
+    for (const proj of gate.projects) {
+      const txt     = `• ${proj.projectName} - ${proj.projectId}`;
+      const lines   = wrapLines(txt, textW);
+      const rowH    = lines * PROJ_LINE_H + PROJ_PAD_V;
+
+      if (gy + rowH > cardBottom + 0.01) break;
+
+      slide.addText(txt, {
         x: cx + 0.12, y: gy,
-        w: cardW - 0.20, h: PROJ_H,
-        fontSize: PROJ_FONT,
-        color: h(VOIS_COLORS.bodyText), fontFace: FONTS.body, valign: 'middle',
+        w: textW, h: rowH,
+        fontSize: F_PROJ,
+        color: h(VOIS_COLORS.bodyText), fontFace: FONTS.body,
+        valign: 'top', wrap: true,
       });
-      gy += PROJ_H;
-    } else {
-      slide.addText(item.text, {
-        x: cx + 0.12, y: gy,
-        w: cardW - 0.20, h: PROJ_H,
-        fontSize: Math.max(5.0, PROJ_FONT - 0.5), italic: true,
-        color: h(VOIS_COLORS.mutedText), fontFace: FONTS.body, valign: 'middle',
-      });
-      gy += PROJ_H;
+      gy += rowH;
     }
   }
 }
 
 // ─── summary slide ────────────────────────────────────────────────────────────
-
-// Natural height a card needs to display all its content at base row sizes
-const CARD_HEADER_H = 0.05 + 0.20 + 0.04 + 0.08; // top-bar + name row + divider + padding
-const BASE_GATE_H   = 0.22;
-const BASE_PROJ_H   = 0.175;
-
-function naturalCardH(pm: PMGroup): number {
-  let h = CARD_HEADER_H;
-  for (const gate of pm.gates) {
-    h += BASE_GATE_H + gate.projects.length * BASE_PROJ_H;
-  }
-  return h;
-}
 
 function addSummarySlide(pptx: PptxGenJS, pmGroups: PMGroup[], slideNum: number): void {
   const slide = pptx.addSlide();
@@ -240,39 +208,43 @@ function addSummarySlide(pptx: PptxGenJS, pmGroups: PMGroup[], slideNum: number)
 
   const totalAll = pmGroups.reduce((s, g) => s + g.totalProjects, 0);
 
-  const n    = pmGroups.length;
-  const cols = n <= 1 ? 1 : n <= 2 ? 2 : 3;
-  const gapX = 0.09;
-  const gapY = 0.07;
+  const n     = pmGroups.length;
+  const cols  = n <= 1 ? 1 : n <= 2 ? 2 : 3;
+  const gapX  = 0.09;
+  const gapY  = 0.07;
   const cardW = (LAYOUT.usableW - gapX * (cols - 1)) / cols;
   const availH = LAYOUT.cardsTotalH;
 
-  // Greedy column packing: assign each PM to the shortest column
-  const colPMs:  PMGroup[][] = Array.from({ length: cols }, () => []);
-  const colRawH: number[]    = new Array(cols).fill(0);
+  // Compute natural (content-driven) height for every PM card
+  const naturalH = pmGroups.map(pm => computeCardHeight(pm, cardW));
 
-  for (const pm of pmGroups) {
-    const shortest = colRawH.indexOf(Math.min(...colRawH));
-    colPMs[shortest].push(pm);
-    colRawH[shortest] += naturalCardH(pm) + gapY;
+  // Greedy shortest-column-first packing
+  const colItems: { pm: PMGroup; h: number }[][] = Array.from({ length: cols }, () => []);
+  const colH: number[] = new Array(cols).fill(0);
+
+  for (let i = 0; i < pmGroups.length; i++) {
+    const shortest = colH.indexOf(Math.min(...colH));
+    colItems[shortest].push({ pm: pmGroups[i], h: naturalH[i] });
+    colH[shortest] += naturalH[i] + gapY;
   }
 
-  // Scale factor: make the tallest column fill availH exactly
-  const maxRawH  = Math.max(...colRawH);
-  const scale    = maxRawH > availH ? availH / maxRawH : 1;
+  // If the tallest column overflows, scale all heights down uniformly
+  const maxColH = Math.max(...colH);
+  const scale   = maxColH > availH ? availH / maxColH : 1;
 
-  // Draw each column
+  // Render
   for (let col = 0; col < cols; col++) {
     const cx = LAYOUT.marginL + col * (cardW + gapX);
     let cy    = LAYOUT.cardsStartY;
 
-    for (const pm of colPMs[col]) {
-      const cardH = naturalCardH(pm) * scale;
+    for (const { pm, h } of colItems[col]) {
+      const cardH = h * scale;
       drawPMCard(slide, pm, cx, cy, cardW, cardH);
       cy += cardH + gapY * scale;
     }
   }
 
+  // Grand total bar
   const tbY = LAYOUT.cardsEndY + LAYOUT.GRAND_TOTAL_GAP;
   slide.addShape(RECT, {
     x: LAYOUT.marginL, y: tbY, w: LAYOUT.usableW, h: LAYOUT.GRAND_TOTAL_H,

@@ -21,10 +21,10 @@ export function useColumnMapping(headers: string[]) {
   useEffect(() => {
     if (headers.length === 0) return;
     setMapping({
-      pmName: autoDetect(headers, ['pm', 'manager', 'owner', 'responsible']),
-      projectName: autoDetect(headers, ['project name', 'name', 'title', 'project title']),
-      projectId: autoDetect(headers, ['id', 'code', 'number', 'ref']),
-      gateApproved: autoDetect(headers, ['gate', 'approved', 'stage', 'phase', 'status']),
+      pmName:       autoDetect(headers, ['oit project manager', 'pm', 'manager', 'owner', 'responsible']),
+      projectName:  autoDetect(headers, ['title', 'project name', 'name', 'project title']),
+      projectId:    autoDetect(headers, ['projectno', 'id', 'code', 'number', 'ref']),
+      gateApproved: autoDetect(headers, ['gate approved', 'gate', 'approved', 'stage', 'phase', 'status']),
     });
   }, [headers]);
 

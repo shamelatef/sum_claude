@@ -216,6 +216,19 @@ function drawPMCard(
 
 // ─── summary slide ────────────────────────────────────────────────────────────
 
+// Natural height a card needs to display all its content at base row sizes
+const CARD_HEADER_H = 0.05 + 0.20 + 0.04 + 0.08; // top-bar + name row + divider + padding
+const BASE_GATE_H   = 0.22;
+const BASE_PROJ_H   = 0.175;
+
+function naturalCardH(pm: PMGroup): number {
+  let h = CARD_HEADER_H;
+  for (const gate of pm.gates) {
+    h += BASE_GATE_H + gate.projects.length * BASE_PROJ_H;
+  }
+  return h;
+}
+
 function addSummarySlide(pptx: PptxGenJS, pmGroups: PMGroup[], slideNum: number): void {
   const slide = pptx.addSlide();
 
@@ -228,20 +241,36 @@ function addSummarySlide(pptx: PptxGenJS, pmGroups: PMGroup[], slideNum: number)
   const totalAll = pmGroups.reduce((s, g) => s + g.totalProjects, 0);
 
   const n    = pmGroups.length;
-  const grid = distributeCards(n);
-  const cols = grid.cols, rows = grid.rows;
-  const gapX = 0.09, gapY = 0.07;
-
+  const cols = n <= 1 ? 1 : n <= 2 ? 2 : 3;
+  const gapX = 0.09;
+  const gapY = 0.07;
   const cardW = (LAYOUT.usableW - gapX * (cols - 1)) / cols;
-  const cardH = (LAYOUT.cardsTotalH - gapY * (rows - 1)) / rows;
+  const availH = LAYOUT.cardsTotalH;
 
-  for (let i = 0; i < pmGroups.length; i++) {
-    const pm  = pmGroups[i];
-    const col = i % cols;
-    const row = Math.floor(i / cols);
-    const cx  = LAYOUT.marginL + col * (cardW + gapX);
-    const cy  = LAYOUT.cardsStartY + row * (cardH + gapY);
-    drawPMCard(slide, pm, cx, cy, cardW, cardH);
+  // Greedy column packing: assign each PM to the shortest column
+  const colPMs:  PMGroup[][] = Array.from({ length: cols }, () => []);
+  const colRawH: number[]    = new Array(cols).fill(0);
+
+  for (const pm of pmGroups) {
+    const shortest = colRawH.indexOf(Math.min(...colRawH));
+    colPMs[shortest].push(pm);
+    colRawH[shortest] += naturalCardH(pm) + gapY;
+  }
+
+  // Scale factor: make the tallest column fill availH exactly
+  const maxRawH  = Math.max(...colRawH);
+  const scale    = maxRawH > availH ? availH / maxRawH : 1;
+
+  // Draw each column
+  for (let col = 0; col < cols; col++) {
+    const cx = LAYOUT.marginL + col * (cardW + gapX);
+    let cy    = LAYOUT.cardsStartY;
+
+    for (const pm of colPMs[col]) {
+      const cardH = naturalCardH(pm) * scale;
+      drawPMCard(slide, pm, cx, cy, cardW, cardH);
+      cy += cardH + gapY * scale;
+    }
   }
 
   const tbY = LAYOUT.cardsEndY + LAYOUT.GRAND_TOTAL_GAP;

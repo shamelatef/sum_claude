@@ -128,29 +128,47 @@ function drawPMCard(
     line: { color: h(VOIS_COLORS.cardBorder), pt: 0.5 },
   });
 
-  // ── content area — fixed-height rows ──────────────────────────────────
+  // ── content area — dynamic row heights so ALL items fit ──────────────
   const contentStartY = divY + 0.04;
   const contentEndY   = cy + cardH - 0.04;
   const contentH      = contentEndY - contentStartY;
 
-  const GATE_H = 0.22;
-  const PROJ_H = 0.175;
-  const GATE_FONT = 7.5;
-  const PROJ_FONT = 7.0;
+  const MAX_GATE_H = 0.22,  MIN_GATE_H = 0.11;
+  const MAX_PROJ_H = 0.175, MIN_PROJ_H = 0.09;
 
   const items: ContentItem[] = [];
   for (const gate of pm.gates) {
-    items.push({ kind: 'gate', text: `Gate Approved: G${gate.gate} (${gate.projects.length})` });
+    items.push({ kind: 'gate', text: `Gate Approved: ${gate.gate} (${gate.projects.length})` });
     for (const proj of gate.projects) {
       items.push({ kind: 'proj', text: `${proj.projectName} - ${proj.projectId}` });
     }
   }
 
+  // Scale row heights down proportionally so everything fits
+  const gateCount = items.filter(i => i.kind === 'gate').length;
+  const projCount  = items.filter(i => i.kind === 'proj').length;
+  const neededH    = gateCount * MAX_GATE_H + projCount * MAX_PROJ_H;
+
+  let GATE_H: number, PROJ_H: number;
+  if (neededH <= contentH) {
+    GATE_H = MAX_GATE_H;
+    PROJ_H = MAX_PROJ_H;
+  } else {
+    const scale = contentH / neededH;
+    GATE_H = Math.max(MIN_GATE_H, MAX_GATE_H * scale);
+    PROJ_H = Math.max(MIN_PROJ_H, MAX_PROJ_H * scale);
+  }
+
+  // Font sizes track row height
+  const GATE_FONT = Math.max(5.5, GATE_H * 34);
+  const PROJ_FONT = Math.max(5.0, PROJ_H * 40);
+
+  // Fit as many items as possible; overflow → "+N more"
   let usedH = 0;
   const visible: ContentItem[] = [];
   for (let i = 0; i < items.length; i++) {
     const rowH = items[i].kind === 'gate' ? GATE_H : PROJ_H;
-    if (usedH + rowH > contentH + 0.01) {
+    if (usedH + rowH > contentH + 0.005) {
       visible.pop();
       const hidden = items.length - visible.length;
       visible.push({ kind: 'more', text: `+${hidden} more` });
@@ -164,14 +182,14 @@ function drawPMCard(
   for (const item of visible) {
     if (item.kind === 'gate') {
       slide.addShape(RECT, {
-        x: cx + 0.07, y: gy + 0.02,
-        w: cardW - 0.14, h: GATE_H - 0.04,
+        x: cx + 0.07, y: gy + 0.01,
+        w: cardW - 0.14, h: GATE_H - 0.02,
         fill: { color: h(VOIS_COLORS.gateTag) },
         line: { color: h(VOIS_COLORS.cardBorder), pt: 0.5 },
       });
       slide.addText(truncate(item.text, 40), {
-        x: cx + 0.10, y: gy + 0.02,
-        w: cardW - 0.20, h: GATE_H - 0.04,
+        x: cx + 0.10, y: gy + 0.01,
+        w: cardW - 0.20, h: GATE_H - 0.02,
         fontSize: GATE_FONT, bold: true,
         color: h(VOIS_COLORS.gateTagText), fontFace: FONTS.body, valign: 'middle',
       });
@@ -188,7 +206,7 @@ function drawPMCard(
       slide.addText(item.text, {
         x: cx + 0.12, y: gy,
         w: cardW - 0.20, h: PROJ_H,
-        fontSize: 6.5, italic: true,
+        fontSize: Math.max(5.0, PROJ_FONT - 0.5), italic: true,
         color: h(VOIS_COLORS.mutedText), fontFace: FONTS.body, valign: 'middle',
       });
       gy += PROJ_H;
@@ -322,7 +340,7 @@ function addPMSlide(
         w: GATE_W, h: rowH * 0.40,
         fill: { color: h(VOIS_COLORS.gateSolid) }, line: { color: h(VOIS_COLORS.gateSolid) },
       });
-      slide.addText(`Gate Approved: G${gate.gate} (${gate.projects.length})`, {
+      slide.addText(`Gate Approved: ${gate.gate} (${gate.projects.length})`, {
         x: LAYOUT.marginL + 0.022, y: by,
         w: GATE_W, h: rowH * 0.40,
         fontSize: FONT_SIZES.gateLabel, bold: true,

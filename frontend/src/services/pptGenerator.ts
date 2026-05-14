@@ -54,12 +54,6 @@ function addHeader(slide: PptxGenJS.Slide, title: string, sub?: string): void {
     });
   }
 
-  slide.addText('VOIS', {
-    x: W - 0.62, y: 0, w: 0.59, h: 0.55,
-    fontSize: 9.5, bold: true,
-    color: h(VOIS_COLORS.primary), fontFace: FONTS.title,
-    align: 'center', valign: 'middle',
-  });
 }
 
 function addFooter(slide: PptxGenJS.Slide, slideNum: number): void {
@@ -72,9 +66,17 @@ function addFooter(slide: PptxGenJS.Slide, slideNum: number): void {
     fill: { color: h(VOIS_COLORS.primary) }, line: { color: h(VOIS_COLORS.primary) } });
 
   slide.addText('DWS EG PM Team', {
-    x: 0.16, y: fy + 0.02, w: W - 0.9, h: fH - 0.04,
+    x: 0.16, y: fy + 0.02, w: W * 0.35, h: fH - 0.04,
     fontSize: FONT_SIZES.footer, color: '888888',
     fontFace: FONTS.body, valign: 'middle',
+  });
+
+  // VOIS wordmark — centred in the footer
+  slide.addText('VOIS', {
+    x: (W - 0.59) / 2, y: fy, w: 0.59, h: fH,
+    fontSize: 9.5, bold: true,
+    color: h(VOIS_COLORS.primary), fontFace: FONTS.title,
+    align: 'center', valign: 'middle',
   });
 
   slide.addText(`${slideNum}`, {
@@ -280,24 +282,18 @@ function addPMSlide(
   });
 
   const sy = LAYOUT.contentStartY;
-  slide.addShape(RECT, {
-    x: LAYOUT.marginL, y: sy, w: LAYOUT.usableW, h: 0.21,
-    fill: { color: h(VOIS_COLORS.summaryBarBg) },
-    line: { color: h(VOIS_COLORS.summaryBarBorder), pt: 0.5 },
+
+  // Total projects count only
+  slide.addText(`Total Projects: ${pm.totalProjects}`, {
+    x: LAYOUT.marginL + 0.10, y: sy, w: LAYOUT.usableW - 0.2, h: 0.21,
+    fontSize: FONT_SIZES.summaryBar, bold: true,
+    color: h(VOIS_COLORS.summaryBarText), fontFace: FONTS.body, valign: 'middle',
   });
-  slide.addText(
-    `PM: ${pm.pmName}   ·   Total: ${pm.totalProjects} projects   ·   Slide: ${blocks.length} shown`,
-    {
-      x: LAYOUT.marginL + 0.10, y: sy, w: LAYOUT.usableW - 0.2, h: 0.21,
-      fontSize: FONT_SIZES.summaryBar,
-      color: h(VOIS_COLORS.summaryBarText), fontFace: FONTS.body, valign: 'middle',
-    }
-  );
 
   // Each project gets 4 fixed lines: name + OIT Objective + 2 blank bullets
   const LINE_H  = 0.175;                       // height of one text line
-  const ROW_PAD = 0.055;                       // vertical gap between rows
-  const ROW_H   = LINE_H * 4 + ROW_PAD;       // total row height ≈ 0.755"
+  const ROW_GAP = 0.10;                        // visible gap between project rows
+  const ROW_H   = LINE_H * 4 + ROW_GAP;       // total row height ≈ 0.80"
 
   const listStartY = sy + 0.25;
   const listEndY   = LAYOUT.contentEndY;
@@ -366,9 +362,9 @@ function addPMSlide(
       });
     }
 
-    // ── Row separator ─────────────────────────────────────────────────
+    // ── Row separator (sits inside the content area, gap below is whitespace) ─
     slide.addShape(LINE, {
-      x: LAYOUT.marginL, y: by + ROW_H - 0.003, w: LAYOUT.usableW, h: 0,
+      x: LAYOUT.marginL, y: by + ROW_H - ROW_GAP, w: LAYOUT.usableW, h: 0,
       line: { color: h(VOIS_COLORS.divider), pt: 0.5 },
     });
   }

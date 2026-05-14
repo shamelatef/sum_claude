@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(npx ts-node-dev *)",
+      "Bash(npx vite *)",
+      "Bash(Start-Sleep -Seconds 4)",
+      "Bash(Invoke-RestMethod -Uri \"http://localhost:3001/api/health\" -ErrorAction SilentlyContinue)",
+      "Bash(curl -s http://localhost:3001/api/health)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(Remove-Item -Recurse -Force \"C:/Users/shame/Desktop/Sum_Claude/frontend/node_modules/.vite\" -ErrorAction SilentlyContinue)",
+      "Bash(npx ts-node *)"
+    ]
+  }
+}

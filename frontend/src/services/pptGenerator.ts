@@ -10,34 +10,24 @@ const h = (c: string) => (c.startsWith('#') ? c.slice(1) : c);
 
 // ─── layout helpers ───────────────────────────────────────────────────────────
 
-// Fixed font sizes — never shrink; all cards use these values
-const F_GATE   = 7.5;
-const F_PROJ   = 7.0;
+// Fixed font sizes — identical on every card, never shrink
+const F_GATE = 7.5;
+const F_PROJ = 7.0;
 
-// Row geometry constants (inches)
-const GATE_ROW_H  = 0.22;   // gate pill height (always 1 line)
-const PROJ_LINE_H = 0.115;  // height per wrapped line at 7pt Calibri
-const PROJ_PAD_V  = 0.03;   // extra vertical padding per project row
-const HDR_FIXED_H = 0.05 + 0.20 + 0.04 + 0.08; // top-bar + name + divider + content-top-pad
-const CARD_PAD_B  = 0.06;   // inner bottom padding
-const CHARS_PER_IN = 16.5;  // Calibri 7pt average chars per inch (mixed case)
+// Fixed row heights — predictable, consistent
+const GATE_ROW_H = 0.22;   // gate pill row
+const PROJ_ROW_H = 0.165;  // project bullet row
+const MORE_ROW_H = 0.155;  // "+N more" row
+const HDR_H_TOTAL = 0.05 + 0.20 + 0.04 + 0.06; // topBar + name + divider gap + content top pad
+const CARD_PAD_B  = 0.05;  // inner bottom padding
 
-function wrapLines(text: string, widthIn: number): number {
-  const cpl = Math.max(10, Math.floor(widthIn * CHARS_PER_IN));
-  return Math.max(1, Math.ceil(text.length / cpl));
-}
-
-function computeCardHeight(pm: PMGroup, cardW: number): number {
-  const tw = cardW - 0.20;
-  let h = HDR_FIXED_H;
+/** Total natural height needed to show ALL content at fixed row sizes */
+function computeCardHeight(pm: PMGroup): number {
+  let h = HDR_H_TOTAL + CARD_PAD_B;
   for (const gate of pm.gates) {
-    h += GATE_ROW_H;
-    for (const proj of gate.projects) {
-      const txt = `• ${proj.projectName} - ${proj.projectId}`;
-      h += wrapLines(txt, tw) * PROJ_LINE_H + PROJ_PAD_V;
-    }
+    h += GATE_ROW_H + gate.projects.length * PROJ_ROW_H;
   }
-  return h + CARD_PAD_B;
+  return h;
 }
 
 // ─── chrome ───────────────────────────────────────────────────────────────────
@@ -150,48 +140,77 @@ function drawPMCard(
     line: { color: h(VOIS_COLORS.cardBorder), pt: 0.5 },
   });
 
-  // ── content area — fixed fonts, wrap-aware row heights ───────────────
+  // ── content area — fixed row heights, clean overflow with "+N more" ───
   const contentStartY = divY + 0.04;
   const cardBottom    = cy + cardH - CARD_PAD_B;
   const textW         = cardW - 0.20;
 
-  let gy = contentStartY;
-
+  // Flatten all items so we can count how many fit before committing to render
+  interface RI { kind: 'gate' | 'proj'; gate: GateGroup; proj?: Project }
+  const allRows: RI[] = [];
   for (const gate of pm.gates) {
-    // Safety: stop if we'd overflow the card
-    if (gy + GATE_ROW_H > cardBottom + 0.01) break;
+    allRows.push({ kind: 'gate', gate });
+    for (const proj of gate.projects) allRows.push({ kind: 'proj', gate, proj });
+  }
 
-    // Gate label pill
-    slide.addShape(RECT, {
-      x: cx + 0.07, y: gy + 0.01,
-      w: cardW - 0.14, h: GATE_ROW_H - 0.02,
-      fill: { color: h(VOIS_COLORS.gateTag) },
-      line: { color: h(VOIS_COLORS.cardBorder), pt: 0.5 },
-    });
-    slide.addText(`Gate Approved: ${gate.gate} (${gate.projects.length})`, {
-      x: cx + 0.10, y: gy + 0.01,
-      w: cardW - 0.20, h: GATE_ROW_H - 0.02,
-      fontSize: F_GATE, bold: true,
-      color: h(VOIS_COLORS.gateTagText), fontFace: FONTS.body, valign: 'middle',
-    });
-    gy += GATE_ROW_H;
+  // Determine how many rows fit, reserving space for "+N more" when needed
+  let usedH = contentStartY - cy;  // offset from card top to content start
+  let fitCount = 0;
+  for (let i = 0; i < allRows.length; i++) {
+    const rowH = allRows[i].kind === 'gate' ? GATE_ROW_H : PROJ_ROW_H;
+    const remaining = allRows.length - i - 1;
+    const needMore  = remaining > 0 ? MORE_ROW_H : 0;
+    if (usedH + rowH + needMore + CARD_PAD_B > cardH + 0.005) break;
+    usedH += rowH;
+    fitCount++;
+  }
 
-    for (const proj of gate.projects) {
-      const txt     = `• ${proj.projectName} - ${proj.projectId}`;
-      const lines   = wrapLines(txt, textW);
-      const rowH    = lines * PROJ_LINE_H + PROJ_PAD_V;
+  const hidden    = allRows.length - fitCount;
+  const showRows  = allRows.slice(0, fitCount);
 
-      if (gy + rowH > cardBottom + 0.01) break;
+  // Never render a gate label as the very last shown item (orphan guard)
+  if (showRows.length > 0 && showRows[showRows.length - 1].kind === 'gate') {
+    showRows.pop();
+  }
+  const finalHidden = allRows.length - showRows.length;
 
+  let gy = contentStartY;
+  for (const row of showRows) {
+    if (row.kind === 'gate') {
+      slide.addShape(RECT, {
+        x: cx + 0.07, y: gy + 0.01,
+        w: cardW - 0.14, h: GATE_ROW_H - 0.02,
+        fill: { color: h(VOIS_COLORS.gateTag) },
+        line: { color: h(VOIS_COLORS.cardBorder), pt: 0.5 },
+      });
+      slide.addText(`Gate Approved: ${row.gate.gate} (${row.gate.projects.length})`, {
+        x: cx + 0.10, y: gy + 0.01,
+        w: cardW - 0.20, h: GATE_ROW_H - 0.02,
+        fontSize: F_GATE, bold: true,
+        color: h(VOIS_COLORS.gateTagText), fontFace: FONTS.body, valign: 'middle',
+      });
+      gy += GATE_ROW_H;
+    } else {
+      const txt = `• ${row.proj!.projectName} - ${row.proj!.projectId}`;
       slide.addText(txt, {
         x: cx + 0.12, y: gy,
-        w: textW, h: rowH,
+        w: textW, h: PROJ_ROW_H,
         fontSize: F_PROJ,
         color: h(VOIS_COLORS.bodyText), fontFace: FONTS.body,
-        valign: 'top', wrap: true,
+        valign: 'middle',
       });
-      gy += rowH;
+      gy += PROJ_ROW_H;
     }
+  }
+
+  // "+N more" indicator if content was clipped
+  if (finalHidden > 0) {
+    slide.addText(`+${finalHidden} more`, {
+      x: cx + 0.12, y: gy,
+      w: textW, h: MORE_ROW_H,
+      fontSize: 6, italic: true,
+      color: h(VOIS_COLORS.mutedText), fontFace: FONTS.body, valign: 'middle',
+    });
   }
 }
 
@@ -216,7 +235,7 @@ function addSummarySlide(pptx: PptxGenJS, pmGroups: PMGroup[], slideNum: number)
   const availH = LAYOUT.cardsTotalH;
 
   // Compute natural (content-driven) height for every PM card
-  const naturalH = pmGroups.map(pm => computeCardHeight(pm, cardW));
+  const naturalH = pmGroups.map(pm => computeCardHeight(pm));
 
   // Greedy shortest-column-first packing
   const colItems: { pm: PMGroup; h: number }[][] = Array.from({ length: cols }, () => []);

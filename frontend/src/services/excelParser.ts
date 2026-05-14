@@ -31,14 +31,29 @@ export async function parseExcelFile(file: File): Promise<ParsedExcelData> {
   return { headers, rows, totalRows: rows.length };
 }
 
+const EXCLUDED_PROGRESS = new Set(['cancelled', 'closed']);
+
+function findProgressColumn(rows: RawRow[]): string | null {
+  if (rows.length === 0) return null;
+  const key = Object.keys(rows[0]).find((k) => k.toLowerCase().trim() === 'progress');
+  return key ?? null;
+}
+
 export function groupData(
   rows: RawRow[],
   mapping: ColumnMapping,
   selectedPMs: string[]
 ): PMGroup[] {
   const pmMap = new Map<string, Map<string, Project[]>>();
+  const progressCol = findProgressColumn(rows);
 
   for (const row of rows) {
+    // Skip cancelled / closed projects
+    if (progressCol) {
+      const progress = String(row[progressCol] ?? '').trim().toLowerCase();
+      if (EXCLUDED_PROGRESS.has(progress)) continue;
+    }
+
     const rawPM = row[mapping.pmName];
     const pmName = cleanPMName(rawPM !== undefined ? String(rawPM) : '');
     if (!pmName) continue;

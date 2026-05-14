@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  base: '/sum_claude/',
+  base: process.env.GITHUB_ACTIONS ? '/sum_claude/' : '/',
   server: {
     port: 5173,
   },
